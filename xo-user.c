@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,6 +83,33 @@ static void listen_keyboard_handler(void)
     close(attr_fd);
 }
 
+/* Translate draw_buffer into actual display format */
+static int print_board(char const *display_buf)
+{
+    uint32_t tmp, buf = 0x0, mask = 0x3;
+    memcpy(&buf, display_buf, sizeof(buf));
+    printf("\n\n");
+    for (int i = 0; i < BOARD_SIZE; i++) {
+        for (int j = 0; j < (BOARD_SIZE << 1) - 1; j++) {
+            if (j & 1) {
+                tmp = buf & mask;
+                char sign = (tmp) == 0x0 ? ' ' : ((tmp) == 0x01 ? 'O' : 'X');
+                printf("%c", sign);
+                buf >>= 2;
+            } else {
+                printf("|");
+            }
+        }
+        printf("\n");
+        for (int k = 0; k < (BOARD_SIZE << 1) - 1; k++) {
+            printf("%c", '-');
+        }
+        printf("\n");
+    }
+
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     if (!status_check())
@@ -91,7 +119,7 @@ int main(int argc, char *argv[])
     int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
     fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 
-    char display_buf[DRAWBUFFER_SIZE];
+    char display_buf[4];
 
     fd_set readset;
     int device_fd = open(XO_DEVICE_FILE, O_RDONLY);
@@ -116,9 +144,10 @@ int main(int argc, char *argv[])
         } else if (read_attr && FD_ISSET(device_fd, &readset)) {
             FD_CLR(device_fd, &readset);
             printf("\033[H\033[J"); /* ASCII escape code to clear the screen */
-            read(device_fd, display_buf, DRAWBUFFER_SIZE);
-            display_buf[DRAWBUFFER_SIZE - 1] = '\0';
-            printf("%s", display_buf);
+            read(device_fd, display_buf, sizeof(display_buf));
+            if (read_attr) {
+                print_board(display_buf);
+            }
         }
     }
 
